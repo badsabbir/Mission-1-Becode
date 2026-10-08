@@ -1,0 +1,85 @@
+// ============================================================
+// Mission 01 — queries I actually used (workspace: log-sentinel-lab-1)
+// Run in Sentinel → Logs, KQL mode.
+// ============================================================
+
+// --- Step 4: is anything arriving at all? ---
+
+// Does my machine send heartbeats to the SIEM?
+Heartbeat
+| take 10
+
+// --- Step 5: first questions ---
+
+// 1. Is my machine talking to me, and how recently?
+Heartbeat
+| summarize LastSeen = max(TimeGenerated) by Computer
+
+// 2. Is it talking to me NOW, or am I reading old news? (clock vs. ingestion delay)
+Heartbeat
+| project TimeGenerated, ingestion_time(), Delay = ingestion_time() - TimeGenerated
+| take 20
+
+// 3. What kinds of events am I actually collecting in the Event table (chain A)?
+Event
+| summarize count() by EventLevelName
+
+// 4. Who logged in, and when? — Security log via chain A (one text field per event)
+Event
+| where EventLog == "Security" and EventID == 4624
+| project TimeGenerated, Computer, RenderedDescription
+| order by TimeGenerated desc
+
+// 4b. Same, keeping only logons that mention my own account
+Event
+| where EventLog == "Security" and EventID == 4624
+| where RenderedDescription has "mohammed"
+| project TimeGenerated, Computer, RenderedDescription
+| order by TimeGenerated desc
+
+// --- Step 5b: the SOC way (chain B) ---
+
+// 5. Who logged in, and when? — SecurityEvent, already split into columns
+SecurityEvent
+| where EventID == 4624
+| project TimeGenerated, Computer, Account, LogonType, IpAddress
+| order by TimeGenerated desc
+
+// Which human logons happened (services excluded), grouped by account and logon type?
+SecurityEvent
+| where TimeGenerated > ago(7d)
+| where EventID in (4624, 4625, 4634, 4647, 4672) and LogonType != 5
+| summarize Count = count(), First = min(TimeGenerated), Last = max(TimeGenerated)
+    by EventID, TargetUserName, LogonType, IpAddress
+| order by First asc
+
+// --- Step 6: hunting for something I did not do ---
+
+// Which security event types exist, how many, and when — rarest first?
+SecurityEvent
+| where TimeGenerated > ago(7d)
+| summarize Count = count(), First = min(TimeGenerated), Last = max(TimeGenerated) by EventID, Activity
+| order by Count asc
+
+// Which processes enumerated local users and groups (4798/4799) — reconnaissance?
+SecurityEvent
+| where TimeGenerated > ago(7d)
+| where EventID in (4798, 4799)
+| summarize Count = count(), First = min(TimeGenerated), Last = max(TimeGenerated)
+    by EventID, SubjectUserName, CallerProcessName, TargetUserName
+| order by Last desc
+
+// What exactly happened around the suspicious net1.exe event (09:13–09:16 UTC)?
+SecurityEvent
+| where TimeGenerated between (datetime(2026-10-08 09:13) .. datetime(2026-10-08 09:16))
+| project TimeGenerated, EventID, SubjectUserName, SubjectLogonId, TargetUserName,
+          CallerProcessName, CallerProcessId, LogonType, LogonProcessName
+| order by TimeGenerated asc
+
+// Did anything unusual show up in the Application / System logs (chain A)?
+Event
+| where TimeGenerated > ago(7d)
+| where EventLog != "Security"
+| summarize Count = count(), First = min(TimeGenerated), Last = max(TimeGenerated)
+    by EventLog, Source, EventID, EventLevelName
+| order by Last desc
