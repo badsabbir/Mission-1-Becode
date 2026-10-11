@@ -7,3 +7,4 @@ Evidence that my monitoring exists: a Windows 10 lab workstation connected throu
 | [`runbook.md`](runbook.md) | How I built it, what broke, how I fixed it, chain A vs chain B |
 | [`queries.kql`](queries.kql) | The KQL queries I used, each with the question it answers |
 | [`detection.md`](detection.md) | Step 6 — the event I did not cause, and how I found it |
+| [`ctf.md`](ctf.md) | CTF on hamilton.corp (seat WKS-L51): each challenge with its hints, how I solved it, and the result |
